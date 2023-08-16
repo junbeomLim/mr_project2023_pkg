@@ -1,0 +1,18 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/limjunbeom/ros2_ws/build/python_pkg",
+        "/home/limjunbeom/ros2_ws/install/python_pkg/lib/python3.8/site-packages",
+        "/home/limjunbeom/ros2_ws/build/mr_project2023_pkg",
+        "/home/limjunbeom/ros2_ws/install/mr_project2023_pkg/lib/python3.8/site-packages",
+        "/home/limjunbeom/ros2_ws/install/my_msgs/lib/python3.8/site-packages",
+        "/opt/ros/foxy/lib/python3.8/site-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/limjunbeom/ros2_ws/build/python_pkg",
+        "/home/limjunbeom/ros2_ws/install/python_pkg/lib/python3.8/site-packages",
+        "/home/limjunbeom/ros2_ws/build/mr_project2023_pkg",
+        "/home/limjunbeom/ros2_ws/install/mr_project2023_pkg/lib/python3.8/site-packages",
+        "/home/limjunbeom/ros2_ws/install/my_msgs/lib/python3.8/site-packages",
+        "/opt/ros/foxy/lib/python3.8/site-packages"
+    ]
+}
