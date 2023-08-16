@@ -34,7 +34,7 @@ class get_action(Node):
         j_1_w = msg.j_1_w
         j_2_w = msg.j_2_w
         j_1_deg = 3*j_1_w
-        j_2_deg = 3*j_1_w
+        j_2_deg = 3*j_2_w
         
         #임의로 가정
         l_1 = 0.25 #250 mm

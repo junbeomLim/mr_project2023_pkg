@@ -83,8 +83,8 @@ class SimpleCustomEnv(gym.Env):
         self.w = -1.0
 
         # 관찰 공간과 행동 공간 정의
-        self.observation_space = spaces.Box(low=0.0, high=1.0, shape=(4,), dtype=np.float32)
-        self.action_space = spaces.Box(low = np.array([0.0,0.0]),high = np.array([1.0,1.0]), shape=(2,) ,dtype=np.float32)  #각 관절의 각속도, 
+        self.observation_space = spaces.Box(low= 0.0, high= 1.0, shape=(4,), dtype=np.float32)
+        self.action_space = spaces.Discrete(9)  #J_1_W: 증가 유지 감소 * J_2_W: 증가 유지 감소
 
     def get_state(self, j_1_deg, j_1_w, j_2_deg, j_2_w):
         self.j_1_deg = j_1_deg
@@ -99,8 +99,7 @@ class SimpleCustomEnv(gym.Env):
         self.reward = -self.c_1*(self.a_1-self.deg)**2 -self.c_2*(self.a_2-self.w)**2
         return
 
-    def step(self,action):
-        # 에이전트의 행동에 따라 환경 업데이트
+    def step(self, action):
         self.state = (self.j_1_deg, self.j_1_w, self.j_2_deg, self.j_2_w)
 
         # 보상 계산
@@ -149,7 +148,7 @@ TAU = 0.005
 LR = 1e-4
 
 # Get number of actions from gym action space
-n_actions = len(env.action_space.low)
+n_actions = env.action_space.n
 # Get the number of state observations
 state = env.reset()
 n_observations = len(state)
@@ -177,9 +176,9 @@ def select_action(state):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            return policy_net(state).squeeze()*100.0 #각속도 max 100
+            return policy_net(state).max(1)[1].view(1, 1)
     else:
-        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.float).squeeze()*100 #각속도 max 100
+        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
 
 episode_durations = []
 
@@ -295,7 +294,7 @@ class senddata(Node):
         msg.j_2_deg = j_2_deg
         msg.j_2_w = j_2_w
         self.publisher_.publish(msg)
-        self.get_logger().info(f"\n j_1: {j_1_deg} deg {j_1_w} deg/s \n j_2: {j_2_deg} deg {j_2_w} deg/s")
+        self.get_logger().info(f"\n j_1: {j_1_w} deg/s \n j_2: {j_2_w} deg/s")
 
 #------------------------------------------------------------------------------------------------
 
@@ -331,7 +330,7 @@ def main(args=None):
     senddata_node = senddata()
 
     if torch.cuda.is_available():
-        num_episodes = 600
+            num_episodes = 600
     else:
         num_episodes = 50
 
@@ -344,13 +343,42 @@ def main(args=None):
 #---------------------------------------------------------------------------------------
             #action 선택 및 전송
             action = select_action(state)
-            #getdata_node.get_logger().info(f"action: {action.item()[0]}")
-            #getdata_node.get_logger().info(f'shape : {action}')
-            #getdata_node.get_logger().info(f'j_1_w : {action[0]}')
-            
-            j_1_w = action[0].item()
-            j_2_w = action[1].item()
+            getdata_node.get_logger().info(f"action: {action.item()}")
 
+            #action 선택
+            if action.item() == 0.0:
+                j_1_w += 5
+                j_2_w += 5           
+            elif action.item() == 1.0:
+                j_1_w += 5
+                j_2_w -= 5           
+            elif action.item() == 2.0:
+                j_1_w -= 5
+                j_2_w += 5
+            elif action.item() == 3.0:
+                j_1_w -= 5
+                j_2_w -= 5
+            elif action.item() == 4.0:
+                j_1_w += 5
+                
+            elif action.item() == 5.0:
+                j_1_w -= 5
+                
+            elif action.item() == 6.0:
+                j_2_w += 5
+            
+            elif action.item() == 7.0:
+                j_2_w -= 5
+            
+            elif action.item() == 8.0:
+                pass
+
+            j_1_w = min(j_1_w, 100.0)
+            j_1_w = max(j_1_w, 0.0)
+
+            j_2_w = min(j_2_w, 100.0)
+            j_2_w = max(j_2_w, 0.0)
+            
             rclpy.spin_once(senddata_node)            
 
             #step 함수
@@ -371,7 +399,7 @@ def main(args=None):
                 rclpy.spin_once(getdata_node)
             env.get_state(j_1_deg, j_1_w, j_2_deg, j_2_w)          
             
-            observation, reward, done, _ = env.step(1)
+            observation, reward, done, _ = env.step(action.item())
             #getdata_node.get_logger().info(f"{observation} {reward} {done}")
 
             reward = torch.tensor([reward], device=device)
