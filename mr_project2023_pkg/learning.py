@@ -110,7 +110,7 @@ class SimpleCustomEnv(gym.Env):
         reward = self.reward
 
         # 종료 조건 검사
-        done = abs(self.deg-self.a_1) <= 15.0 and abs(self.w-self.a_2) <= 50.0
+        done = abs(self.deg-self.a_1) <= 20.0 and abs(self.w-self.a_2) <= 80.0
         if done:
             reward += 10
         

@@ -29,11 +29,12 @@ class get_action(Node):
         self.j_2_w = msg.j_2_w
         
         #임의로 가정
-        c = 354 #모터 파워 100 = 59rpm -> deg/s로 환산
+        c = 3.54 #모터 파워 1 = 0.59rpm -> deg/s로 환산
+        run_t = 3 #3초 동안 움직인다 가정
         j_1_ds = self.j_1_w*c
         j_2_ds = self.j_2_w*c
-        self.j_1_deg = 3*j_1_ds
-        self.j_2_deg = 3*j_2_ds
+        self.j_1_deg = run_t*j_1_ds
+        self.j_2_deg = run_t*j_2_ds
         
         l_1 = 0.25 #250 mm
         l_2 = 0.11 #110 mm
@@ -41,10 +42,10 @@ class get_action(Node):
         g = 9.8 #중력 가속도
 
 
-        t = ((l_1*self.j_1_w*math.cos(self.j_1_deg)**2+x*l_2*self.j_2_w*math.cos(self.j_2_deg))+math.sqrt((l_1*self.j_1_w*math.cos(self.j_1_deg)+x*(l_2*self.j_2_w*math.cos(self.j_2_deg)))**2+2*g*(1-math.cos(self.j_1_deg))))/g # 땅에 닿는 순간
+        t = ((l_1*j_1_ds*math.cos(self.j_1_deg)**2+x*l_2*j_2_ds*math.cos(self.j_2_deg))+math.sqrt((l_1*self.j_1_w*math.cos(self.j_1_deg)+x*(l_2*j_2_ds*math.cos(self.j_2_deg)))**2+2*g*(1-math.cos(self.j_1_deg))))/g # 땅에 닿는 순간
         
-        self.camera_deg = abs(self.j_2_w*t+self.j_1_deg+self.j_2_deg)%360
-        self.camera_w = abs(self.j_2_w)
+        self.camera_deg = abs(j_2_ds*t+self.j_1_deg+self.j_2_deg)%360
+        self.camera_w = abs(j_2_ds)
 
         self.new_data_received = True
     
@@ -70,7 +71,7 @@ class send_data(Node):
         self.j_1_deg = j_1_deg
         self.j_1_w = j_1_w
         self.j_2_deg = j_2_deg
-        self.j_2_w = j_2_wde
+        self.j_2_w = j_2_w
         
     def timer_callback_camera(self):
         msg = Cameradata()
