@@ -70,7 +70,7 @@ class send_data(Node):
         self.j_1_deg = j_1_deg
         self.j_1_w = j_1_w
         self.j_2_deg = j_2_deg
-        self.j_2_w = j_2_w
+        self.j_2_w = j_2_wde
         
     def timer_callback_camera(self):
         msg = Cameradata()
