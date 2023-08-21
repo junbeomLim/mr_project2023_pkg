@@ -1,0 +1,31 @@
+rosbag2_bagfile_information:
+  version: 4
+  storage_identifier: sqlite3
+  relative_file_paths:
+    - 20230822_0.db3
+  duration:
+    nanoseconds: 1918502987481
+  starting_time:
+    nanoseconds_since_epoch: 1692635500506603237
+  message_count: 11514
+  topics_with_message_count:
+    - topic_metadata:
+        name: /robotarm
+        type: my_msgs/msg/Robotarmcontrol
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 3838
+    - topic_metadata:
+        name: /joint_1
+        type: my_msgs/msg/Robotarmcontrol
+        serialization_format: cdr
+        offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 2147483647\n    nsec: 4294967295\n  lifespan:\n    sec: 2147483647\n    nsec: 4294967295\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 2147483647\n    nsec: 4294967295\n  avoid_ros_namespace_conventions: false"
+      message_count: 3838
+    - topic_metadata:
+        name: /camera
+        type: my_msgs/msg/Cameradata
+        serialization_format: cdr
+        offered_qos_profiles: "- history: 3\n  depth: 0\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 2147483647\n    nsec: 4294967295\n  lifespan:\n    sec: 2147483647\n    nsec: 4294967295\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 2147483647\n    nsec: 4294967295\n  avoid_ros_namespace_conventions: false"
+      message_count: 3838
+  compression_format: ""
+  compression_mode: ""

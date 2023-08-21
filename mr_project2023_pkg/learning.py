@@ -80,8 +80,8 @@ class SimpleCustomEnv(gym.Env):
         self.a_1 = 90 #deg
         self.a_2 = 250 #deg/s
         #c_1:c_2 = 10:1
-        self.c_1 = 0.1
-        self.c_2 = 0.01
+        self.c_1 = 0.01
+        self.c_2 = 0.001
         self.reward = 0.0
         self.deg = -1.0
         self.w = -1.0
@@ -109,10 +109,10 @@ class SimpleCustomEnv(gym.Env):
         # 보상 계산
         reward = self.reward
 
-        # 종료 조건 검사
-        done = abs(self.deg-self.a_1) <= 20.0 and abs(self.w-self.a_2) <= 80.0
+        # 종료 조건 검사 (성공 시)
+        done = abs(self.deg-self.a_1) <= 15.0 and abs(self.w-self.a_2) <= 50.0
         if done:
-            reward += 10
+            reward += 5
         
         return np.array(self.state, dtype=np.float32), reward, done, {}
 
