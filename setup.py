@@ -23,6 +23,7 @@ setup(
         'console_scripts': [
             'learn_node = mr_project2023_pkg.learning:main',
             'robotarm_simulation = mr_project2023_pkg.robotarm_simulation:main',
+            'robotarm = mr_project2023_pkg.robotarm:main'
         ],
     },
 )
