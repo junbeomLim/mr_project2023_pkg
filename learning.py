@@ -25,10 +25,9 @@ import numpy as np
 
 """--------------------------설명---------------------------------------
 state: 물병을 놓는 순간의 각 관절의 각도 및 각속도
-action: 물병을 놓는 순간의 관절 속도의 변화(증가, 유지, 감소), 관절 하나 당 3개의 action이 존재하므로 저네 action space 는 3*3 = 9의 크기를 지닌다.
-로봇팔은 특정 시간이 지난 후 무조건 물병을 던진다.물병이 착지할 때 물병의 각도와 각속도를 통해 reward를 계산한다.
-물병을 던진 후, reward를 통해 다음 epsiode에 던질 때에는 각 관절의 속도를 더 높일 것인지, 줄일 것인지, 유지할 것인지 결정(Action)한다. 
-
+action: 물병을 놓는 순간의 관절 속도의 변화(증가, 유지, 감소), 관절 하나 당 3개의 action이 존재하므로 action space 는 3*3 = 9의 크기를 지닌다.
+로봇팔의 각 관절은 임의의 위치에서 무조건 물병을 던진다.물병이 착지할 때 물병의 각도와 각속도를 통해 reward를 계산한다.
+물병을 던진 후, reward를 통해 다음 epsiode에 던질 때에는 각 관절의 위치(각도)를 더 높일 것인지, 줄일 것인지, 유지할 것인지 결정(Action)한다. 
 -----------------------------------------------------------------------"""
 
 
@@ -76,7 +75,7 @@ class SimpleCustomEnv(gym.Env):
         # 환경 리셋 및 초기 상태 설정
         self.reset()
         
-        #reward 관련 상수
+        #reward 관련 상수 camera 관련 변수
         self.a_1 = 90 #deg
         self.a_2 = 250 #deg/s
         #c_1:c_2 = 10:1
@@ -87,14 +86,12 @@ class SimpleCustomEnv(gym.Env):
         self.w = -1.0
 
         # 관찰 공간과 행동 공간 정의
-        self.observation_space = spaces.Box(low= 0.0, high= 1.0, shape=(4,), dtype=np.float32)
-        self.action_space = spaces.Discrete(9)  #J_1_W: 증가 유지 감소 * J_2_W: 증가 유지 감소
+        self.observation_space = spaces.Box(low= 0.0, high= 1.0, shape=(2,), dtype=np.float32) #관절의 각도 2개, 관절의 속도 (무시) : shape = (2, )
+        self.action_space = spaces.Discrete(9)  #J_1_pos: 증가 유지 감소 * J_2_pos: 증가 유지 감소
 
-    def get_state(self, j_1_deg, j_1_w, j_2_deg, j_2_w):
-        self.j_1_deg = j_1_deg
-        self.j_1_w = j_1_w
-        self.j_2_deg = j_2_deg
-        self.j_2_w = j_2_w
+    def get_state(self, j_1_pos, j_2_pos):
+        self.j_1_pos = j_1_pos
+        self.j_2_pos = j_2_pos
         return
     
     def get_reward(self, deg, w):
@@ -104,7 +101,7 @@ class SimpleCustomEnv(gym.Env):
         return
 
     def step(self, action):
-        self.state = (self.j_1_deg, self.j_1_w, self.j_2_deg, self.j_2_w)
+        self.state = (self.j_1_pos, self.j_2_pos)
 
         # 보상 계산
         reward = self.reward
@@ -118,11 +115,9 @@ class SimpleCustomEnv(gym.Env):
 
     def reset(self):
         # 초기 상태 설정
-        self.j_1_deg = 0.0
-        self.j_1_w = 0.0
-        self.j_2_deg = 0.0
-        self.j_2_w = 0.0
-        self.state = np.array([self.j_1_deg, self.j_1_w, self.j_2_deg, self.j_2_w]) 
+        self.j_1_pos = 0.0
+        self.j_2_pos = 0.0
+        self.state = np.array([self.j_1_pos, self.j_2_pos]) 
 
         return (self.state, {})
 #-----------------------------------------------------------------------------------------------------
@@ -193,7 +188,7 @@ def plot_durations(show_result=False):
         plt.plot(means.numpy())
 
     plt.pause(0.001)  # pause a bit so that plots are updated
-        
+
 def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
@@ -247,34 +242,18 @@ class getdata(Node):
         self.subscription_camera = self.create_subscription(Cameradata, 'camera', self.get_camera, 10)
         self.subscription_camera # prevent unused variable warning
 
-        self.subscription_robotarm_ = self.create_subscription(Robotarmcontrol, 'joint_1', self.get_robotdata, 10) 
-        self.subscription_robotarm_ # prevent unused variable warning
-
         self.camera_deg = 0.0
         self.camera_w = 0.0
-        self.j_1_deg = 0.0
-        self.j_1_w = 0.0
-        self.j_2_deg = 0.0
-        self.j_2_w = 0.0
-        self.camera_new_data_received = False
-        self.robotarm_new_data_received = False
-
+        self.new_data_received = False
+        
     def get_camera(self, camera_msg):
         #self.get_logger().info(f"camera: {camera_msg.deg} {camera_msg.w}")
         self.camera_deg = camera_msg.deg
         self.camera_w = camera_msg.w
-        self.camera_new_data_received = True
+        self.new_data_received = True
 
-    def get_robotdata(self, robotarm_msg):
-        #self.get_logger().info(f"robotarm: {robotarm_msg.j_1_deg} {robotarm_msg.j_1_w} {robotarm_msg.j_2_deg} {robotarm_msg.j_2_w}")
-        self.j_1_deg = robotarm_msg.j_1_deg
-        self.j_1_w = robotarm_msg.j_1_w
-        self.j_2_deg = robotarm_msg.j_2_deg
-        self.j_2_w = robotarm_msg.j_2_w
-        self.robotarm_new_data_received = True
-    
     def return_data(self):
-        return self.j_1_deg, self.j_1_w, self.j_2_deg, self.j_2_w, self.camera_deg, self.camera_w
+        return self.camera_deg, self.camera_w
 
 class senddata(Node):
     def __init__(self):
@@ -283,25 +262,19 @@ class senddata(Node):
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         
-        self.j_1_deg = 0.0
-        self.j_1_w = 0.0
-        self.j_2_deg = 0.0
-        self.j_2_w = 0.0
-
-    def get_robotarm_data(self, j_1_deg=-1.0, j_1_w=-1.0, j_2_deg=-1.0, j_2_w=-1.0):
-        self.j_1_deg = j_1_deg
-        self.j_1_w = j_1_w
-        self.j_2_deg = j_2_deg
-        self.j_2_w = j_2_w
+        self.j_1_pos = 0.0
+        self.j_2_pos = 0.0
+        
+    def get_robotarm_data(self, j_1_pos=-1.0, j_2_pos=-1.0):
+        self.j_1_pos = j_1_pos
+        self.j_2_pos = j_2_pos
 
     def timer_callback(self):
         msg = Robotarmcontrol()
-        msg.j_1_deg = self.j_1_deg
-        msg.j_1_w = self.j_1_w
-        msg.j_2_deg = self.j_2_deg
-        msg.j_2_w = self.j_2_w
+        msg.j_1_pos = self.j_1_pos
+        msg.j_2_pos = self.j_2_pos
         self.publisher_.publish(msg)
-        self.get_logger().info(f"\n j_1: {msg.j_1_w} power \n j_2: {msg.j_2_w} power")
+        self.get_logger().info(f"\n j_1: {msg.j_1_pos} pos \n j_2: {msg.j_2_pos} pos")
 
 #------------------------------------------------------------------------------------------------
 
@@ -332,10 +305,8 @@ def main(args=None):
 
     #initailize 
     #관절의 각도 및 각속도는 모두 양수 (크기만 고려한다)
-    j_1_deg = 0.0
-    j_1_w = 0.0
-    j_2_deg = 0.0
-    j_2_w = 0.0
+    j_1_pos = 0.0
+    j_2_pos = 0.0
 
     rclpy.init(args=args)
 
@@ -352,7 +323,12 @@ def main(args=None):
         state, _ = env.reset()
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         
-        velocity_width = 5
+        j_1_max = 1023.0
+        j_1_min = 512.0
+        j_2_max = 650.0
+        j_2_min = 512.0
+        pos_width = 100.0
+        
             
         for t in count():
 #---------------------------------------------------------------------------------------
@@ -362,39 +338,40 @@ def main(args=None):
 
             #action 선택
             if action.item() == 0:
-                j_1_w += velocity_width
-                j_2_w += velocity_width
+                j_1_pos += pos_width
+                j_2_pos += pos_width
             elif action.item() == 1:
-                j_1_w += velocity_width
-                j_2_w -= velocity_width
+                j_1_pos += pos_width
+                j_2_pos -= pos_width
             elif action.item() == 2:
-                j_1_w -= velocity_width
-                j_2_w += velocity_width
+                j_1_pos -= pos_width
+                j_2_pos += pos_width
             elif action.item() == 3:
-                j_1_w -= velocity_width
-                j_2_w -= velocity_width
+                j_1_pos -= pos_width
+                j_2_pos -= pos_width
             elif action.item() == 4:
-                j_1_w += velocity_width
-                
+                j_1_pos += pos_width
+
             elif action.item() == 5:
-                j_1_w -= velocity_width
+                j_1_pos -= pos_width
                 
             elif action.item() == 6:
-                j_2_w += velocity_width
+                j_2_pos += pos_width
             
             elif action.item() == 7:
-                j_2_w -= velocity_width
+                j_2_pos -= pos_width
             
             elif action.item() == 8:
                 pass
             
-            j_1_w = min(j_1_w, 100.0)
-            j_1_w = max(j_1_w, 0.0)
+            j_1_pos = min(j_1_pos, j_1_max)
+            j_1_pos = max(j_1_pos, j_1_min)
 
-            j_2_w = min(j_2_w, 100.0)
-            j_2_w = max(j_2_w, 0.0)
+            j_2_pos = min(j_2_pos, j_2_max)
+            j_2_pos = max(j_2_pos, j_2_min)
             
-            senddata_node.get_robotarm_data(0.0, j_1_w, 0.0, j_2_w)
+            #모터 값 발신
+            senddata_node.get_robotarm_data(j_1_pos, j_2_pos)
             rclpy.spin_once(senddata_node)
 
             #step 함수
@@ -402,16 +379,17 @@ def main(args=None):
             #물병을 던진 순간의 robot data 각 관절의 각속도 및 각도 얻기
             camera_deg = -1
             getdata_node.get_logger().info("wait for camera")
-            while getdata_node.camera_new_data_received == False or getdata_node.robotarm_new_data_received == False:
+            while getdata_node.new_data_received == False:
                 rclpy.spin_once(getdata_node)
             
-            j_1_deg, j_1_w, j_2_deg, j_2_w, camera_deg, camera_w = getdata_node.return_data()
-            getdata_node.camera_new_data_received = False
-            getdata_node.robotarm_new_data_received = False
+            #카메라 값 수신
+            camera_deg, camera_w = getdata_node.return_data()
+            getdata_node.new_data_received = False
             #getdata_node.get_logger().info(f"{camera_deg}")
             
+            #리워드 및 상태 업데이트
             env.get_reward(camera_deg, camera_w)
-            env.get_state(j_1_deg, j_1_w, j_2_deg, j_2_w)          
+            env.get_state(j_1_pos, j_2_pos)          
             
             observation, reward, done, _ = env.step(action.item())
             #getdata_node.get_logger().info(f"{observation} {reward} {done}")
@@ -433,6 +411,7 @@ def main(args=None):
             # θ′ ← τ θ + (1 −τ )θ′
             target_net_state_dict = target_net.state_dict()
             policy_net_state_dict = policy_net.state_dict()
+
             for key in policy_net_state_dict:
                 target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
             target_net.load_state_dict(target_net_state_dict)
