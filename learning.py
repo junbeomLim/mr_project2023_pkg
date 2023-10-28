@@ -23,6 +23,8 @@ import gym
 from gym import spaces
 import numpy as np
 
+import os
+
 """--------------------------설명---------------------------------------
 state: 물병을 놓는 순간의 각 관절의 각도 및 각속도
 action: 물병을 놓는 순간의 관절 속도의 변화(증가, 유지, 감소), 관절 하나 당 3개의 action이 존재하므로 action space 는 3*3 = 9의 크기를 지닌다.
@@ -298,6 +300,14 @@ def main(args=None):
     global done
     global steps_done
 
+    SAVE_INTERVAL = 2  # 2 에피소드마다 모델 저장
+
+    j_1_max = 1023.0 #모터 1 최대값
+    j_1_min = 512.0 #모터 1 최소값
+    j_2_max = 650.0 #모터 2 최대값
+    j_2_min = 512.0 #모터 2 최소값
+    pos_width = 150.0 #모터 position 변동 범위
+
     #initailize 
     # 물병의 각도 및 각속도는 모두 양수 (크기만 고려한다)
     camera_deg = 0.0
@@ -318,17 +328,19 @@ def main(args=None):
     else:
         num_episodes = 50
 
+    # 저장된 가중치 불러오기
+    save_path_policy_net = os.path.expanduser('~/ros2_ws/src/mr_project2023_pkg/policy_net_weights.pth') #저장 위치
+    save_path_target_net = os.path.expanduser('~/ros2_ws/src/mr_project2023_pkg/target_net_weights.pth') #저장 위치
+
+    #torch.save(policy_net.state_dict(), save_path_policy_net) #저장되어 있지 않을 때만, 오류 방지
+    #torch.save(policy_net.state_dict(), save_path_target_net) #저장되어 있지 않을 때만, 오류 방지
+    policy_net.load_state_dict(torch.load(save_path_policy_net))
+    policy_net.load_state_dict(torch.load(save_path_target_net))
+    
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
         state, _ = env.reset()
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-        
-        j_1_max = 1023.0
-        j_1_min = 512.0
-        j_2_max = 650.0
-        j_2_min = 512.0
-        pos_width = 100.0
-        
             
         for t in count():
 #---------------------------------------------------------------------------------------
@@ -416,10 +428,19 @@ def main(args=None):
                 target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
             target_net.load_state_dict(target_net_state_dict)
             
+            if i_episode % SAVE_INTERVAL == 0:
+                # 학습 중간에 모델 저장
+                torch.save(policy_net.state_dict(), save_path_policy_net)
+                torch.save(policy_net.state_dict(), save_path_target_net) 
+
             if done:
                 episode_durations.append(t + 1)
                 plot_durations()
                 break
+    
+    # 최종 학습이 끝난 후에도 모델을 저장
+    torch.save(policy_net.state_dict(), save_path_policy_net)
+    torch.save(policy_net.state_dict(), save_path_target_net)
 
     print('Complete')
     plot_durations(show_result=True)
