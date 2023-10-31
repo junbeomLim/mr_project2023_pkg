@@ -14,6 +14,9 @@ from rclpy.parameter import Parameter
 robotarm_Connect = False #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
 simulation_mode = True #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
 
+GRIPPER_OPEN = 1023 #1023은 물병을 놓을 때, 다이나믹셀 position
+GRIPPER_CLOSE = 512 #512은 물병을 놓을 때, 다이나믹셀 position
+
 if robotarm_Connect:
     import os
 
@@ -83,7 +86,6 @@ if robotarm_Connect:
         print("Press any key to terminate...")
         getch()
         quit()
-
 
     # Set port baudrate
     if portHandler.setBaudRate(BAUDRATE):
@@ -389,8 +391,7 @@ def main(args=None):
 
     get_action_node = get_action()
     send_data_node = send_data()
-    
-    #for i in range(50):
+
     while True:
         get_action_node.get_logger().info("wait for action")
         while get_action_node.new_data_received == False:
@@ -399,17 +400,29 @@ def main(args=None):
         j_1_pos, j_2_pos, camera_deg, camera_w = get_action_node.return_parameter()
         get_action_node.new_data_received = False
 
+        #그리퍼 조정하기
+        #키보드 값 입력 받아 조정
+        user_input = input('open: o, close: c, end: q :')
+        while user_input != 1:
+            if user_input == 'o' or user_input == 'O':
+                user_input = input('open: o, close: c, end: q :')
+            elif user_input == 'c' or user_input == 'C':
+                user_input = input('open: o, close: c, end: q :')
+            elif user_input == 'q' or user_input == 'Q':
+                break
+
         #로봇팔 움직임
         robotarm_move(int(j_1_pos),int(j_2_pos))
-        #물병 놓기
-        move_gripper(int(1023)) #1023은 물병을 놓을 때, 다이나믹셀 position
+        #물병 놓기(던지기)
+        move_gripper(GRIPPER_OPEN)
 
         send_data_node.get_camera_parameter(camera_deg, camera_w)
         send_data_node.get_state_parameter(j_1_pos, j_2_pos)
         rclpy.spin_once(send_data_node) #카메라 값 전송 #로봇팔이 던지고 나서의 값 전송
+        
         #로봇팔 원위치
         robotarm_move(512,512)
-        move_gripper(512)
+        move_gripper(GRIPPER_CLOSE)
         
     # Close port
     portHandler.closePort()
