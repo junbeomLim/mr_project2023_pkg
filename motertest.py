@@ -223,19 +223,16 @@ user_input = input('open: o, close: c, end: q :')
 while user_input != 1:
     if user_input == 'o' or user_input == 'O':
         user_input = input('open: o, close: c, end: q :')
+        
     elif user_input == 'c' or user_input == 'C':
         user_input = input('open: o, close: c, end: q :')
     elif user_input == 'q' or user_input == 'Q':
         break
 
 #로봇팔 움직임
-robotarm_move(int(j_1_pos),int(j_2_pos))
+robotarm_move(512,512)
 #물병 놓기(던지기)
 move_gripper(GRIPPER_OPEN)
-
-send_data_node.get_camera_parameter(camera_deg, camera_w)
-send_data_node.get_state_parameter(j_1_pos, j_2_pos)
-rclpy.spin_once(send_data_node) #카메라 값 전송 #로봇팔이 던지고 나서의 값 전송
 
 #로봇팔 원위치
 robotarm_move(512,512)

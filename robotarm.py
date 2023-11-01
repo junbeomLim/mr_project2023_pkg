@@ -12,7 +12,7 @@ from rclpy.parameter import Parameter
 
 #전처리기
 robotarm_Connect = False #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
-simulation_mode = True #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
+simulation_mode = False #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
 
 GRIPPER_OPEN = 1023 #1023은 물병을 놓을 때, 다이나믹셀 position
 GRIPPER_CLOSE = 512 #512은 물병을 놓을 때, 다이나믹셀 position
@@ -261,76 +261,90 @@ class get_action(Node):
         #물병이 떨어지는 부분 인식 범위선:
         x_land = 500
         y_land = 870
+        
+        angle = 0
+        preangle = 0
+
+        # 칼만 필터 파라미터 초기화
+        Q = 1e-5  # 프로세스 분산
+        R = 0.01  # 측정 분산
+        x_hat = 0  # 초기 예측값
+        P = 1  # 초기 예측 오차
 
         #단위환산
         fps = 330 #opencv에서 각속도는 deg/frame으로 변환됨
 
-        # 동영상 또는 웹캠에서 비디오를 읽습니다.
-        cap = cv2.VideoCapture(0)  # 웹캠 사용 시 0, 동영상 파일의 경로를 지정하려면 파일 경로를 입력합니다.
+        # 카메라 열기 노트북 카메라: 0, 카메라: 2
+        cap = cv2.VideoCapture(2)
 
         while True:
-            ret, frame = cap.read()
+            # 프레임 읽기
+            _, frame = cap.read()
 
-            if not ret:
-                break
+            # 빨간색 범위 설정 bgr
+            lower_red = np.array([0, 0, 102])
+            upper_red = np.array([51, 60, 255])
 
-            # 빨간색 물체를 추적하기 위한 HSV 색상 범위 지정
-            lower_red = np.array([0, 70, 50])
-            upper_red = np.array([10, 255, 255])
+            # 이미지에서 빨간색 영역 추출
+            mask = cv2.inRange(frame, lower_red, upper_red)
 
-            # 프레임을 HSV 색상 공간으로 변환합니다.
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-            # 빨간색 객체를 추출합니다.
-            mask = cv2.inRange(hsv, lower_red, upper_red)
-
-            # 추출된 객체의 경계를 찾습니다.
+            # 빨간색 영역을 감싸는 사각형 찾기
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-            if len(contours) > 0:
-                # 가장 큰 물체를 찾습니다.
-                largest_contour = max(contours, key=cv2.contourArea)
-                rect = cv2.minAreaRect(largest_contour)
+            # 최대 크기의 2개의 빨간색 사각형 찾기
+            contours = sorted(contours, key=cv2.contourArea, reverse=True)[:2]
 
-                # 현재 물체의 중심 좌표와 각도를 계산합니다.
-                current_position = rect[0]
-                angle = rect[2]
+            centers = []
 
-                # 처음 물체를 감지한 경우 초기 각도를 설정합니다.
-                if initial_angle is None:
-                    initial_angle = angle
+            for contour in contours:
+                # 빨간색 영역을 감싸는 최대 크기의 사각형 찾기
+                x, y, w, h = cv2.boundingRect(contour)
 
-                # 현재 각도와 초기 각도의 차이를 계산하여 각속도를 구합니다.
-                angular_velocity = angle - initial_angle
+                # 중심 좌표 계산
+                center_x = x + w // 2
+                center_y = y + h // 2
 
-                # 현재 위치와 각도를 출력합니다.
-                print("현재 위치:", current_position)
-                print("현재 각도:", angle)
-                print("각속도:", angular_velocity)
+                # 중심 좌표 저장
+                centers.append((center_x, center_y))
 
-            # 현재 위치를 이전 위치로 업데이트합니다.
-            previous_position = current_position
+                # 사각형 그리기
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-            # 프레임에 추적한 물체와 정보를 그립니다.
-            box = cv2.boxPoints(rect).astype(int)
-            cv2.drawContours(frame, [box], 0, (0, 255, 0), 2)
-            cv2.putText(frame, f"각도: {angle:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            # 두 중심점이 존재할 때
+            if len(centers) == 2:
+                # 두 중심점 연결하는 선 그리기
+                angular_velocity = angle - preangle
+                cv2.line(frame, centers[0], centers[1], (0, 0, 255), 2)
 
-            # 화면에 프레임을 표시합니다.
-            cv2.imshow('Object Tracking', frame)
+                # 두 중심점 간의 각도 계산
+                angle = np.arctan2(centers[1][1] - centers[0][1], centers[1][0] - centers[0][0]) * 180 / np.pi
+                preangle = angle
 
-            # 물체가 바닥에 착지하면 루프 종료.
-            if current_position[0] < x_land and current_position[1] > y_land:
-                break
+                # 칼만 필터 적용
+                # 예측 단계
+                x_hat_minus = x_hat
+                P_minus = P + Q
 
-            # 'q' 키를 누르면 루프를 종료합니다.
+                # 측정 단계
+                K = P_minus / (P_minus + R)
+                x_hat = x_hat_minus + K * (angle - x_hat_minus)
+                P = (1 - K) * P_minus
+
+                # 각도 출력
+                angle = x_hat
+                print("각도:", angle, "각속도", preangle)
+
+            # 프레임 출력
+            cv2.imshow("Frame", frame)
+
+            # 'q' 키로 루프 종료
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        # 사용한 자원을 해제하고 창을 닫습니다.
+        # 카메라 해제 및 창 닫기
         cap.release()
         cv2.destroyAllWindows() 
-
+        
         return float(angle), float(angular_velocity*fps)   
     
     def listener_callback(self, msg):
@@ -406,8 +420,10 @@ def main(args=None):
         while user_input != 1:
             if user_input == 'o' or user_input == 'O':
                 user_input = input('open: o, close: c, end: q :')
+
             elif user_input == 'c' or user_input == 'C':
                 user_input = input('open: o, close: c, end: q :')
+                
             elif user_input == 'q' or user_input == 'Q':
                 break
 
