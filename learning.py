@@ -27,7 +27,7 @@ import os
 
 """--------------------------설명---------------------------------------
 state: 물병을 놓는 순간의 각 관절의 각도 및 각속도
-action: 물병을 놓는 순간의 관절 속도의 변화(증가, 유지, 감소), 관절 하나 당 3개의 action이 존재하므로 action space 는 3*3 = 9의 크기를 지닌다.
+action: 물병을 놓는 순간의 관절 속도의 변화(증가, 유지, 감소), 관절 하나 당 3개의 action이 존재하므로 action space 는 3 의 크기를 지닌다.
 로봇팔의 각 관절은 임의의 위치에서 무조건 물병을 던진다.물병이 착지할 때 물병의 각도와 각속도를 통해 reward를 계산한다.
 물병을 던진 후, reward를 통해 다음 epsiode에 던질 때에는 각 관절의 위치(각도)를 더 높일 것인지, 줄일 것인지, 유지할 것인지 결정(Action)한다. 
 -----------------------------------------------------------------------"""
@@ -88,12 +88,11 @@ class SimpleCustomEnv(gym.Env):
         self.w = -1.0
 
         # 관찰 공간과 행동 공간 정의
-        self.observation_space = spaces.Box(low= 0.0, high= 1.0, shape=(2,), dtype=np.float32) #관절의 각도 2개, 관절의 속도 (무시) : shape = (2, )
-        self.action_space = spaces.Discrete(9)  #J_1_pos: 증가 유지 감소 * J_2_pos: 증가 유지 감소
+        self.observation_space = spaces.Box(low= 0.0, high= 1.0, shape=(1,), dtype=np.float32) #관절의 각도 1개, 관절의 속도 (무시) : shape = (1, )
+        self.action_space = spaces.Discrete(3)  #J_1_pos: 증가 유지 감소
 
-    def get_state(self, j_1_pos, j_2_pos):
-        self.j_1_pos = j_1_pos
-        self.j_2_pos = j_2_pos
+    def get_state(self, j_pos):
+        self.j_pos = j_pos
         return
     
     def get_reward(self, deg, w):
@@ -103,7 +102,7 @@ class SimpleCustomEnv(gym.Env):
         return
 
     def step(self, action):
-        self.state = (self.j_1_pos, self.j_2_pos)
+        self.state = (self.j_pos)
 
         # 보상 계산
         reward = self.reward
@@ -117,9 +116,8 @@ class SimpleCustomEnv(gym.Env):
 
     def reset(self):
         # 초기 상태 설정
-        self.j_1_pos = 0.0
-        self.j_2_pos = 0.0
-        self.state = np.array([self.j_1_pos, self.j_2_pos]) 
+        self.j_pos = 0.0
+        self.state = np.array([self.j_pos]) 
 
         return (self.state, {})
 #-----------------------------------------------------------------------------------------------------
@@ -264,19 +262,16 @@ class senddata(Node):
         timer_period = 0.5  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback)
         
-        self.j_1_pos = 0.0
-        self.j_2_pos = 0.0
+        self.j_pos = 0.0
         
-    def get_robotarm_data(self, j_1_pos=-1.0, j_2_pos=-1.0):
-        self.j_1_pos = j_1_pos
-        self.j_2_pos = j_2_pos
-
+    def get_robotarm_data(self, j_pos=-1.0):
+        self.j_pos = j_pos
+        
     def timer_callback(self):
         msg = Robotarmcontrol()
-        msg.j_1_pos = self.j_1_pos
-        msg.j_2_pos = self.j_2_pos
+        msg.j_pos = self.j_pos
         self.publisher_.publish(msg)
-        self.get_logger().info(f"\n j_1: {msg.j_1_pos} pos \n j_2: {msg.j_2_pos} pos")
+        self.get_logger().info(f"\n j_1: {msg.j_pos} pos ")
 
 #------------------------------------------------------------------------------------------------
 
@@ -302,11 +297,9 @@ def main(args=None):
 
     SAVE_INTERVAL = 2  # 2 에피소드마다 모델 저장
 
-    j_1_max = 1023.0 #모터 1 최대값
-    j_1_min = 512.0 #모터 1 최소값
-    j_2_max = 650.0 #모터 2 최대값
-    j_2_min = 512.0 #모터 2 최소값
-    pos_width = 150.0 #모터 position 변동 범위
+    j_max = 600.0 #모터 1 최대값
+    j_min = 560.0 #모터 1 최소값
+    pos_width = 20.0 #모터 position 변동 범위
 
     #initailize 
     # 물병의 각도 및 각속도는 모두 양수 (크기만 고려한다)
@@ -315,9 +308,8 @@ def main(args=None):
 
     #initailize 
     #관절의 각도 및 각속도는 모두 양수 (크기만 고려한다)
-    j_1_pos = 0.0
-    j_2_pos = 0.0
-
+    j_pos = 0.0
+    
     rclpy.init(args=args)
 
     getdata_node = getdata()
@@ -350,40 +342,17 @@ def main(args=None):
 
             #action 선택
             if action.item() == 0:
-                j_1_pos += pos_width
-                j_2_pos += pos_width
-            elif action.item() == 1:
-                j_1_pos += pos_width
-                j_2_pos -= pos_width
-            elif action.item() == 2:
-                j_1_pos -= pos_width
-                j_2_pos += pos_width
-            elif action.item() == 3:
-                j_1_pos -= pos_width
-                j_2_pos -= pos_width
-            elif action.item() == 4:
-                j_1_pos += pos_width
-
-            elif action.item() == 5:
-                j_1_pos -= pos_width
-                
-            elif action.item() == 6:
-                j_2_pos += pos_width
-            
-            elif action.item() == 7:
-                j_2_pos -= pos_width
-            
-            elif action.item() == 8:
                 pass
+            elif action.item() == 1:
+                j_pos += pos_width
+            elif action.item() == 2:
+                j_pos -= pos_width
             
-            j_1_pos = min(j_1_pos, j_1_max)
-            j_1_pos = max(j_1_pos, j_1_min)
+            j_pos = min(j_pos, j_max)
+            j_pos = max(j_pos, j_min)
 
-            j_2_pos = min(j_2_pos, j_2_max)
-            j_2_pos = max(j_2_pos, j_2_min)
-            
             #모터 값 발신
-            senddata_node.get_robotarm_data(j_1_pos, j_2_pos)
+            senddata_node.get_robotarm_data(j_pos)
             rclpy.spin_once(senddata_node)
 
             #step 함수
@@ -401,7 +370,7 @@ def main(args=None):
             
             #리워드 및 상태 업데이트
             env.get_reward(camera_deg, camera_w)
-            env.get_state(j_1_pos, j_2_pos)          
+            env.get_state(j_pos)          
             
             observation, reward, done, _ = env.step(action.item())
             #getdata_node.get_logger().info(f"{observation} {reward} {done}")

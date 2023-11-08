@@ -12,230 +12,82 @@ from rclpy.parameter import Parameter
 
 #전처리기
 robotarm_Connect = False #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
-simulation_mode = False #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
+simulation_mode = True #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
 
-GRIPPER_OPEN = 1023 #1023은 물병을 놓을 때, 다이나믹셀 position
-GRIPPER_CLOSE = 512 #512은 물병을 놓을 때, 다이나믹셀 position
+from dynamixel_sdk import *  # Dynamixel SDK library
 
-if robotarm_Connect:
-    import os
+# Protocol version
+PROTOCOL_VERSION = 1.0
 
-    if os.name == 'nt':
-        import msvcrt
-        def getch():
-            return msvcrt.getch().decode()
-    else:
-        import sys, tty, termios
-        fd = sys.stdin.fileno()
-        old_settings = termios.tcgetattr(fd)
-        def getch():
-            try:
-                tty.setraw(sys.stdin.fileno())
-                ch = sys.stdin.read(1)
-            finally:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            return ch
+# Default setting
+DXL1_ID = 1  # Dynamixel ID: 1
+DXL2_ID = 2  # Dynamixel ID: 2
+DXL3_ID = 3  # Dynamixel ID: 3
+BAUDRATE = 57600
+DEVICENAME = '/dev/ttyUSB0'  # Check which port is being used on your controller
 
-    #--------------------------------------------------------------------#
-    #motor control parameter
-    from dynamixel_sdk import *                    # Uses Dynamixel SDK library
+# Control table addresses
+ADDR_AX_TORQUE_ENABLE = 24
+ADDR_AX_GOAL_POSITION = 30
+ADDR_AX_MOVING_SPEED = 32
+DXL_MOVING_STATUS_THRESHOLD = 10
+GRIPPER_OPEN = 20 #20은 물병을 놓을 때, 다이나믹셀 position
+GRIPPER_CLOSE = 240 #240은 물병을 놓을 때, 다이나믹셀 position
 
-    # Control table address
-    ADDR_MX_TORQUE_ENABLE      = 24               # Control table address is different in Dynamixel model
-    ADDR_MX_GOAL_POSITION      = 30
-    ADDR_MX_PRESENT_POSITION   = 36
+# Speed for maintaining position
+SPEED_FOR_MAINTENANCE = 0
 
-    # Data Byte Length
-    LEN_MX_GOAL_POSITION       = 2
-    LEN_MX_PRESENT_POSITION    = 2
+# Initialize PortHandler instance
+portHandler = PortHandler(DEVICENAME)
 
-    # Protocol version
-    PROTOCOL_VERSION            = 1.0               # See which protocol version is used in the Dynamixel
+# Initialize PacketHandler instance
+packetHandler = PacketHandler(PROTOCOL_VERSION)
 
-    # Default setting
-    DXL1_ID                     = 1                 # Dynamixel#1 ID : 1
-    DXL2_ID                     = 2                 # Dynamixel#2 ID : 2
-    DXL3_ID                     = 3                 # Dynamixel#3 ID : 3
-    BAUDRATE                    = 57600             # Dynamixel default baudrate : 57600
-    DEVICENAME                  = '/dev/ttyUSB0'    # Check which port is being used on your controller
-                                                    # ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
-    TORQUE_ENABLE               = 1                 # Value for enabling the torque
-    TORQUE_DISABLE              = 0                 # Value for disabling the torque
-    DXL_MOVING_STATUS_THRESHOLD = 20                # Dynamixel moving status threshold
+# Open port
+if portHandler.openPort():
+    print("Succeeded to open the port")
+else:
+    print("Failed to open the port")
+    quit()
 
-    #----------------------------------------------------------------------------
+# Set port baud rate
+if not portHandler.setBaudRate(BAUDRATE):
+    print("Failed to set the baudrate")
+    quit()
 
-    # Initialize PortHandler instance
-    # Set the port path
-    # Get methods and members of PortHandlerLinux or PortHandlerWindows
-    portHandler = PortHandler(DEVICENAME)
+# Enable torque for all Dynamixels
+for dxl_id in [DXL1_ID, DXL2_ID, DXL3_ID]:
+    packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_AX_TORQUE_ENABLE, 1)
 
-    # Initialize PacketHandler instance
-    # Set the protocol version
-    # Get methods and members of Protocol1PacketHandler or Protocol2PacketHandler
-    packetHandler = PacketHandler(PROTOCOL_VERSION)
+# Move Dynamixel#2 to position 240 and set its speed to 0 to maintain the position
+packetHandler.write2ByteTxRx(portHandler, DXL2_ID, ADDR_AX_GOAL_POSITION, GRIPPER_CLOSE)
+packetHandler.write2ByteTxRx(portHandler, DXL2_ID, ADDR_AX_MOVING_SPEED, SPEED_FOR_MAINTENANCE)
+def move_robotarm(dxl_goal_position, speed):
+    # Move Dynamixel#1 to position and Dynamixel#2 to position
+    packetHandler.write2ByteTxRx(portHandler, DXL1_ID, ADDR_AX_GOAL_POSITION, dxl_goal_position)
+    packetHandler.write2ByteTxRx(portHandler, DXL1_ID, ADDR_AX_MOVING_SPEED, speed)
+    packetHandler.write2ByteTxRx(portHandler, DXL2_ID, ADDR_AX_GOAL_POSITION, 1023-dxl_goal_position)
+    packetHandler.write2ByteTxRx(portHandler, DXL2_ID, ADDR_AX_MOVING_SPEED, speed)
+    packetHandler.write2ByteTxRx(portHandler, DXL3_ID, ADDR_AX_GOAL_POSITION, GRIPPER_CLOSE)
 
-    # Initialize GroupSyncWrite instance
-    groupSyncWrite = GroupSyncWrite(portHandler, packetHandler, ADDR_MX_GOAL_POSITION, LEN_MX_GOAL_POSITION)
+    # Wait for Dynamixel#1 and Dynamixel#2 to reach their goal positions
+    while True:
+        if abs(packetHandler.read2ByteTxRx(portHandler, DXL1_ID, ADDR_AX_GOAL_POSITION)[0] - dxl_goal_position) <= DXL_MOVING_STATUS_THRESHOLD and \
+            abs(packetHandler.read2ByteTxRx(portHandler, DXL2_ID, ADDR_AX_GOAL_POSITION)[0] - (1023-dxl_goal_position)) <= DXL_MOVING_STATUS_THRESHOLD and \
+            abs(packetHandler.read2ByteTxRx(portHandler, DXL3_ID, ADDR_AX_GOAL_POSITION)[0] - GRIPPER_CLOSE) <= DXL_MOVING_STATUS_THRESHOLD:
+            break
 
-    # Open port
-    if portHandler.openPort():
-        print("Succeeded to open the port")
-    else:
-        print("Failed to open the port")
-        print("Press any key to terminate...")
-        getch()
-        quit()
+def move_gripper(dxl3_goal_position):
+    # Move Dynamixel#3 to position
+    packetHandler.write2ByteTxRx(portHandler, DXL3_ID, ADDR_AX_GOAL_POSITION, dxl3_goal_position)
+    # Wait for Dynamixel#1 and Dynamixel#3 to reach their goal positions
+    while True:
+        if abs(packetHandler.read2ByteTxRx(portHandler, DXL3_ID, ADDR_AX_GOAL_POSITION)[0] - dxl3_goal_position) <= DXL_MOVING_STATUS_THRESHOLD:
+            break
 
-    # Set port baudrate
-    if portHandler.setBaudRate(BAUDRATE):
-        print("Succeeded to change the baudrate")
-    else:
-        print("Failed to change the baudrate")
-        print("Press any key to terminate...")
-        getch()
-        quit()
-
-
-    # Enable Dynamixel#1 Torque
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL1_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Dynamixel#%d has been successfully connected" % DXL1_ID)
-
-    # Enable Dynamixel#2 Torque
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL2_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Dynamixel#%d has been successfully connected" % DXL2_ID)
-
-    #gripper
-    # Enable Dynamixel#3 Torque
-    dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL3_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_ENABLE)
-    if dxl_comm_result != COMM_SUCCESS:
-        print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-    elif dxl_error != 0:
-        print("%s" % packetHandler.getRxPacketError(dxl_error))
-    else:
-        print("Dynamixel#%d has been successfully connected" % DXL3_ID)
-#---------------------------------------------------------------------------------------------------#
-
-def robotarm_move(dxl1_goal_pos, dxl2_goal_pos):
-    global robotarm_Connect
-    if robotarm_Connect:
-        dxl1_goal_position = [dxl1_goal_pos]
-        dxl2_goal_position = [dxl2_goal_pos]
-
-        # Allocate goal position value into byte array
-        param_goal_position1 = [DXL_LOBYTE(DXL_LOWORD(dxl1_goal_position[0])), DXL_HIBYTE(DXL_LOWORD(dxl1_goal_position[0]))]
-        param_goal_position2 = [DXL_LOBYTE(DXL_LOWORD(dxl2_goal_position[0])), DXL_HIBYTE(DXL_LOWORD(dxl2_goal_position[0]))]
-
-        # Add Dynamixel#1 goal position value to the Syncwrite parameter storage
-        dxl_addparam_result = groupSyncWrite.addParam(DXL1_ID, param_goal_position1)
-        if dxl_addparam_result != True:
-            print("[ID:%03d] groupSyncWrite addparam failed" % DXL1_ID)
-            quit()
-
-        # Add Dynamixel#2 goal position value to the Syncwrite parameter storage
-        dxl_addparam_result = groupSyncWrite.addParam(DXL2_ID, param_goal_position2)
-        if dxl_addparam_result != True:
-            print("[ID:%03d] groupSyncWrite addparam failed" % DXL2_ID)
-            quit()
-
-        # Syncwrite goal position
-        dxl_comm_result = groupSyncWrite.txPacket()
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-
-        # Clear syncwrite parameter storage
-        groupSyncWrite.clearParam()
-
-        while 1:
-            dxl1_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL1_ID, ADDR_MX_PRESENT_POSITION)
-            if (abs(dxl1_goal_position[0] - dxl1_present_position) > DXL_MOVING_STATUS_THRESHOLD):
-                # Read Dynamixel#1 present position
-                dxl1_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL1_ID, ADDR_MX_PRESENT_POSITION)
-                if dxl_comm_result != COMM_SUCCESS:
-                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-                elif dxl_error != 0:
-                    print("%s" % packetHandler.getRxPacketError(dxl_error))
-
-            dxl2_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL2_ID, ADDR_MX_PRESENT_POSITION)
-            if (abs(dxl2_goal_position[0] - dxl2_present_position) > DXL_MOVING_STATUS_THRESHOLD):
-                # Read Dynamixel#2 present position
-                dxl2_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL2_ID, ADDR_MX_PRESENT_POSITION)
-                if dxl_comm_result != COMM_SUCCESS:
-                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-                elif dxl_error != 0:
-                    print("%s" % packetHandler.getRxPacketError(dxl_error))
-
-            #print("[ID:%03d] GoalPos:%03d  PresPos:%03d\t[ID:%03d] GoalPos:%03d  PresPos:%03d" % (DXL1_ID, dxl_goal_position[index], dxl1_present_position, DXL2_ID, dxl_goal_position[index], dxl2_present_position))
-
-            if not ((abs(dxl1_goal_position[0] - dxl1_present_position) > DXL_MOVING_STATUS_THRESHOLD) and (abs(dxl2_goal_position[0] - dxl2_present_position) > DXL_MOVING_STATUS_THRESHOLD)):
-                break
-
-            # Disable Dynamixel#1 Torque
-            dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL1_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_DISABLE)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
-
-            # Disable Dynamixel#2 Torque
-            dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL2_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_DISABLE)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
-
-def move_gripper(dxl3_goal_pos):
-    global robotarm_Connect
-    if robotarm_Connect:
-        dxl3_goal_position = [dxl3_goal_pos]
-
-        # Allocate goal position value into byte array
-        param_goal_position3 = [DXL_LOBYTE(DXL_LOWORD(dxl3_goal_position[0])), DXL_HIBYTE(DXL_LOWORD(dxl3_goal_position[0]))]
-
-        # Add Dynamixel#3 goal position value to the Syncwrite parameter storage
-        dxl_addparam_result = groupSyncWrite.addParam(DXL3_ID, param_goal_position3)
-        if dxl_addparam_result != True:
-            print("[ID:%03d] groupSyncWrite addparam failed" % DXL3_ID)
-            quit()
-        
-        # Syncwrite goal position
-        dxl_comm_result = groupSyncWrite.txPacket()
-        if dxl_comm_result != COMM_SUCCESS:
-            print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-
-        # Clear syncwrite parameter storage
-        groupSyncWrite.clearParam()
-        
-        #gripper move
-        while 1:
-            dxl3_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL3_ID, ADDR_MX_PRESENT_POSITION)
-            if (abs(dxl3_goal_position[0] - dxl3_present_position) > DXL_MOVING_STATUS_THRESHOLD):
-                # Read Dynamixel#1 present position
-                dxl3_present_position, dxl_comm_result, dxl_error = packetHandler.read4ByteTxRx(portHandler, DXL3_ID, ADDR_MX_PRESENT_POSITION)
-                if dxl_comm_result != COMM_SUCCESS:
-                    print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-                elif dxl_error != 0:
-                    print("%s" % packetHandler.getRxPacketError(dxl_error))
-
-            if not (abs(dxl3_goal_position[0] - dxl3_present_position) > DXL_MOVING_STATUS_THRESHOLD):
-                break
-
-            # Disable Dynamixel#1 Torque
-            dxl_comm_result, dxl_error = packetHandler.write1ByteTxRx(portHandler, DXL3_ID, ADDR_MX_TORQUE_ENABLE, TORQUE_DISABLE)
-            if dxl_comm_result != COMM_SUCCESS:
-                print("%s" % packetHandler.getTxRxResult(dxl_comm_result))
-            elif dxl_error != 0:
-                print("%s" % packetHandler.getRxPacketError(dxl_error))
+# Disable torque for all Dynamixels
+for dxl_id in [DXL1_ID, DXL2_ID, DXL3_ID]:
+    packetHandler.write1ByteTxRx(portHandler, dxl_id, ADDR_AX_TORQUE_ENABLE, 0)
 
 class get_action(Node):
     def __init__(self):
@@ -245,8 +97,7 @@ class get_action(Node):
         
         global simulation_mode
 
-        self.j_1_pos = -1
-        self.j_2_pos = -1
+        self.j_pos = -1
         
         self.camera_deg = -1        
         self.camera_w = -1
@@ -349,22 +200,21 @@ class get_action(Node):
     
     def listener_callback(self, msg):
         #제어할 각도 값 수신
-        self.get_logger().info(f'j_1_pos {msg.j_1_pos} j_2_pos {msg.j_2_pos}')
-        self.j_1_pos = msg.j_1_pos
-        self.j_2_pos = msg.j_2_pos
+        self.get_logger().info(f'j_pos {msg.j_pos}')
+        self.j_pos = msg.j_pos
         
         #카메라 값 수신
         if simulation_mode:
             #임의로 지정, 역학적 분석과 무관
-            self.camera_w = (self.j_1_pos+self.j_2_pos)/6
-            self.camera_deg = (self.j_1_pos+self.j_2_pos)/17
+            self.camera_w = (self.j_pos)/6
+            self.camera_deg = (self.j_pos)/17
         else:
             self.camera_deg, self.camera_w = self.get_camera_data()
 
         self.new_data_received = True
     
     def return_parameter(self):
-        return self.j_1_pos, self.j_2_pos, self.camera_deg, self.camera_w
+        return self.j_pos, self.camera_deg, self.camera_w
 
 class send_data(Node):
     def __init__(self):
@@ -378,9 +228,8 @@ class send_data(Node):
         self.camera_deg = camera_deg
         self.camera_w = camera_w
         
-    def get_state_parameter(self, j_1_pos, j_2_pos):
-        self.j_1_pos = j_1_pos
-        self.j_2_pos = j_2_pos
+    def get_state_parameter(self, j_pos):
+        self.j_pos = j_pos
         
     def timer_callback_camera(self):
         msg = Cameradata()
@@ -391,15 +240,13 @@ class send_data(Node):
 
     def timer_callback_state(self):
         msg = Robotarmcontrol()
-        msg.j_1_pos = self.j_1_pos
-        msg.j_2_pos = self.j_2_pos
+        msg.j_pos = self.j_pos
         self.pub_state.publish(msg)
 
 def main(args=None):
     camera_deg = -1.0
     camera_w = -1.0
-    j_1_pos = -1.0
-    j_2_pos = -1.0
+    j_pos = -1.0
     
     rclpy.init(args=args)
 
@@ -411,34 +258,33 @@ def main(args=None):
         while get_action_node.new_data_received == False:
             rclpy.spin_once(get_action_node) #로봇팔 값 받기
         
-        j_1_pos, j_2_pos, camera_deg, camera_w = get_action_node.return_parameter()
+        j_pos, camera_deg, camera_w = get_action_node.return_parameter()
         get_action_node.new_data_received = False
 
         #그리퍼 조정하기
         #키보드 값 입력 받아 조정
+        move_robotarm(200,1000)
         user_input = input('open: o, close: c, end: q :')
         while user_input != 1:
             if user_input == 'o' or user_input == 'O':
-                user_input = input('open: o, close: c, end: q :')
-
+                move_gripper(GRIPPER_OPEN)
             elif user_input == 'c' or user_input == 'C':
-                user_input = input('open: o, close: c, end: q :')
-                
+                move_gripper(GRIPPER_CLOSE)
             elif user_input == 'q' or user_input == 'Q':
+                move_gripper(GRIPPER_CLOSE)
                 break
+            user_input = input('open: o, close: c, end: q :')
 
         #로봇팔 움직임
-        robotarm_move(int(j_1_pos),int(j_2_pos))
-        #물병 놓기(던지기)
+        move_robotarm(int(j_pos), 1000)
+        time.sleep(0.2)
         move_gripper(GRIPPER_OPEN)
-
-        send_data_node.get_camera_parameter(camera_deg, camera_w)
-        send_data_node.get_state_parameter(j_1_pos, j_2_pos)
-        rclpy.spin_once(send_data_node) #카메라 값 전송 #로봇팔이 던지고 나서의 값 전송
+        #물병 놓기(던지기)
+        move_robotarm(GRIPPER_OPEN, 1000)
         
-        #로봇팔 원위치
-        robotarm_move(512,512)
-        move_gripper(GRIPPER_CLOSE)
+        send_data_node.get_camera_parameter(camera_deg, camera_w)
+        send_data_node.get_state_parameter(j_pos)
+        rclpy.spin_once(send_data_node) #카메라 값 전송 #로봇팔이 던지고 나서의 값 전송
         
     # Close port
     portHandler.closePort()
