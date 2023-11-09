@@ -85,7 +85,7 @@ while user_input != 1:
         break
     user_input = input('open: o, close: c, end: q :')
 
-move_robotarm(580, 1000)
+move_robotarm(590, 1000)
 time.sleep(0.2)
 move_gripper(20)
 move_robotarm(200, 1000)

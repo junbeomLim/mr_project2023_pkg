@@ -298,8 +298,8 @@ def main(args=None):
     SAVE_INTERVAL = 2  # 2 에피소드마다 모델 저장
 
     j_max = 600.0 #모터 1 최대값
-    j_min = 560.0 #모터 1 최소값
-    pos_width = 20.0 #모터 position 변동 범위
+    j_min = 580.0 #모터 1 최소값
+    pos_width = 5.0 #모터 position 변동 범위
 
     #initailize 
     # 물병의 각도 및 각속도는 모두 양수 (크기만 고려한다)
