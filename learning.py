@@ -78,12 +78,13 @@ class SimpleCustomEnv(gym.Env):
         self.reset()
         
         #reward 관련 상수 camera 관련 변수
-        self.a_1 = 90 #deg
-        self.a_2 = 250 #deg/s
-        #c_1:c_2 = 10:1
+        self.a_1 = 15 #deg
+        self.a_2 = 47000 #deg/s
+        #c_1:c_2 = 1000:1
         self.c_1 = 0.01
-        self.c_2 = 0.001
+        self.c_2 = 0.00001
         self.reward = 0.0
+        self.done = 0
         self.deg = -1.0
         self.w = -1.0
 
@@ -95,9 +96,10 @@ class SimpleCustomEnv(gym.Env):
         self.j_pos = j_pos
         return
     
-    def get_reward(self, deg, w):
+    def get_reward(self, deg, w, done):
         self.deg = deg
         self.w = w
+        self.done = done
         self.reward = -self.c_1*(self.a_1-self.deg)**2 -self.c_2*(self.a_2-self.w)**2
         return
 
@@ -106,10 +108,8 @@ class SimpleCustomEnv(gym.Env):
 
         # 보상 계산
         reward = self.reward
-
-        # 종료 조건 검사 (성공 시)
-        done = abs(self.deg-self.a_1) <= 15.0 and abs(self.w-self.a_2) <= 50.0
-        if done:
+        Done = self.done
+        if Done:
             reward += 5
         
         return np.array(self.state, dtype=np.float32), reward, done, {}
@@ -136,6 +136,7 @@ LR = 1e-4
 
 # Get number of actions from gym action space
 n_actions = env.action_space.n
+
 # Get the number of state observations
 state,_ = env.reset()
 n_observations = len(state)
@@ -164,7 +165,7 @@ def select_action(state):
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
             #import pdb; pdb.set_trace()
-            return policy_net(state).max(1)[1].view(1,1)
+            return torch.argmax(policy_net(state)).view(1,1)
     else:
         return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
 
@@ -244,16 +245,18 @@ class getdata(Node):
 
         self.camera_deg = 0.0
         self.camera_w = 0.0
+        self.done = 0
         self.new_data_received = False
         
     def get_camera(self, camera_msg):
         #self.get_logger().info(f"camera: {camera_msg.deg} {camera_msg.w}")
         self.camera_deg = camera_msg.deg
         self.camera_w = camera_msg.w
+        self.done = camera_msg.done
         self.new_data_received = True
 
     def return_data(self):
-        return self.camera_deg, self.camera_w
+        return self.camera_deg, self.camera_w, self.done
 
 class senddata(Node):
     def __init__(self):
@@ -297,9 +300,9 @@ def main(args=None):
 
     SAVE_INTERVAL = 2  # 2 에피소드마다 모델 저장
 
-    j_max = 600.0 #모터 1 최대값
-    j_min = 580.0 #모터 1 최소값
-    pos_width = 5.0 #모터 position 변동 범위
+    j_max = 598.0 #모터 1 최대값
+    j_min = 582.0 #모터 1 최소값
+    pos_width = 4.0 #모터 position 변동 범위
 
     #initailize 
     # 물병의 각도 및 각속도는 모두 양수 (크기만 고려한다)
@@ -364,12 +367,12 @@ def main(args=None):
                 rclpy.spin_once(getdata_node)
             
             #카메라 값 수신
-            camera_deg, camera_w = getdata_node.return_data()
+            camera_deg, camera_w, done = getdata_node.return_data()
             getdata_node.new_data_received = False
             #getdata_node.get_logger().info(f"{camera_deg}")
             
             #리워드 및 상태 업데이트
-            env.get_reward(camera_deg, camera_w)
+            env.get_reward(camera_deg, camera_w, done)
             env.get_state(j_pos)          
             
             observation, reward, done, _ = env.step(action.item())

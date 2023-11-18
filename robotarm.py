@@ -10,9 +10,11 @@ from my_msgs.msg import Robotarmcontrol
 from rclpy.parameter import Parameter
 
 #전처리기
-robotarm_Connect = True #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
+robotarm_Connect = False #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
 simulation_mode = True #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
 
+GRIPPER_OPEN = 20 #20은 물병을 놓을 때, 다이나믹셀 position
+GRIPPER_CLOSE = 240 #240은 물병을 놓을 때, 다이나믹셀 position
 if robotarm_Connect:
     from dynamixel_sdk import *  # Dynamixel SDK library
 
@@ -31,8 +33,6 @@ if robotarm_Connect:
     ADDR_AX_GOAL_POSITION = 30
     ADDR_AX_MOVING_SPEED = 32
     DXL_MOVING_STATUS_THRESHOLD = 10
-    GRIPPER_OPEN = 20 #20은 물병을 놓을 때, 다이나믹셀 position
-    GRIPPER_CLOSE = 240 #240은 물병을 놓을 때, 다이나믹셀 position
 
     # Speed for maintaining position
     SPEED_FOR_MAINTENANCE = 0
@@ -116,9 +116,10 @@ class send_data(Node):
         self.pub_camera = self.create_publisher(Cameradata, 'camera', 10)
         self.timer_camera = self.create_timer(timer_period, self.timer_callback_camera)
         
-    def get_camera_parameter(self, camera_deg, camera_w):
+    def get_camera_parameter(self, camera_deg, camera_w, done):
         self.camera_deg = camera_deg
         self.camera_w = camera_w
+        self.done = done
         
     def get_state_parameter(self, j_pos):
         self.j_pos = j_pos
@@ -127,8 +128,9 @@ class send_data(Node):
         msg = Cameradata()
         msg.deg = self.camera_deg
         msg.w = self.camera_w
+        msg.done = self.done
         self.pub_camera.publish(msg)
-        self.get_logger().info(f'camera {msg.deg} deg {msg.w} deg/s')
+        self.get_logger().info(f'camera {msg.deg} deg {msg.w} deg/s, done {msg.done}')
 
     def timer_callback_state(self):
         msg = Robotarmcontrol()
@@ -145,10 +147,11 @@ def main(args=None):
     angular_velocity = None
 
     #물병이 떨어지는 부분 인식 범위선:
-    y_land = 270
+    y_land = 230
     
     angle = 0
     preangle = 0
+    done = 0
 
     # 칼만 필터 파라미터 초기화
     Q = 1e-5  # 프로세스 분산
@@ -170,7 +173,8 @@ def main(args=None):
             rclpy.spin_once(get_action_node) #로봇팔 값 받기
         
         j_pos = get_action_node.return_parameter()
-        
+        done = 0
+
         #그리퍼 조정하기
         #키보드 값 입력 받아 조정
         move_robotarm(200,1000)
@@ -185,7 +189,7 @@ def main(args=None):
                 break
             user_input = input('open: o, close: c, end: q :')
         
-        if simulation_mode:
+        if not simulation_mode:
             # 카메라 열기 노트북 카메라: 0, 카메라: 2
             cap = cv2.VideoCapture(2)
             
@@ -253,10 +257,6 @@ def main(args=None):
                 # 프레임 출력
                 cv2.imshow("Frame", frame)
                 
-                # 'q' 키로 루프 종료 (cv 창에서)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-                
                 # 'r' 키로 로봇팔 움직이기 (cv 창에서)
                 if cv2.waitKey(1) & 0xFF == ord('r'):
                     if robotarm_Connect:
@@ -276,15 +276,25 @@ def main(args=None):
 
         else:
             #임의로 지정, 역학적 분석과 무관
-            angle = (j_pos)/2.3
-            angular_velocity = (j_pos)/6.4
+            angle = (j_pos)/52.4
+            angular_velocity = (j_pos)/5.51
 
-        camera_deg = float(angle) 
-        camera_w = float(angular_velocity*fps)
+        camera_deg = abs(float(angle)) 
+        camera_w = abs(float(angular_velocity*fps))
+        #성공 유무 입력
+        user_input = input('success: s, fail: f :')
+        while user_input != 1:
+            if user_input == 's' or user_input == 'S':
+                done = 1
+                break
+            elif user_input == 'f' or user_input == 'F':
+               done = 0
+               break
+            user_input = input('open: o, close: c, end: q :')        
 
         #camera_deg, camera_w = get_camera_data(j_pos)
         
-        send_data_node.get_camera_parameter(camera_deg, camera_w)
+        send_data_node.get_camera_parameter(camera_deg, camera_w, done)
         send_data_node.get_state_parameter(j_pos)
         rclpy.spin_once(send_data_node) #카메라 값 전송 #로봇팔이 던지고 나서의 값 전송
         
