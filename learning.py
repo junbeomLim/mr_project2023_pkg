@@ -22,6 +22,8 @@ import torch.nn.functional as F
 import gym
 from gym import spaces
 import numpy as np
+import csv
+from csv import writer
 
 import os
 
@@ -32,6 +34,12 @@ action: 물병을 놓는 순간의 관절 속도의 변화(증가, 유지, 감�
 물병을 던진 후, reward를 통해 다음 epsiode에 던질 때에는 각 관절의 위치(각도)를 더 높일 것인지, 줄일 것인지, 유지할 것인지 결정(Action)한다. 
 -----------------------------------------------------------------------"""
 
+# 저장된 가중치 불러오기
+save_path_policy_net = os.path.expanduser('~/ros2_ws/src/mr_project2023_pkg/policy_net_weights.pth') #저장 위치
+save_path_target_net = os.path.expanduser('~/ros2_ws/src/mr_project2023_pkg/target_net_weights.pth') #저장 위치
+
+#plot 불러오기
+file_path = '/home/limjunbeom/ros2_ws/src/mr_project2023_pkg/duration_t.npy'
 
 plt.ion()
 
@@ -40,6 +48,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 
+def append_np_values_to_csv(file_path, np_values):
+    import pdb; pdb.set_trace()
+    np.save(file_path, np_values)
 
 class ReplayMemory(object):
 
@@ -78,11 +89,11 @@ class SimpleCustomEnv(gym.Env):
         self.reset()
         
         #reward 관련 상수 camera 관련 변수
-        self.a_1 = 15 #deg
-        self.a_2 = 47000 #deg/s
-        #c_1:c_2 = 1000:1
+        self.a_1 = 80 #deg
+        self.a_2 = 20 #deg/s
+        #c_1:c_2 = 10:1
         self.c_1 = 0.01
-        self.c_2 = 0.00001
+        self.c_2 = 0.001
         self.reward = 0.0
         self.done = 0
         self.deg = -1.0
@@ -171,17 +182,30 @@ def select_action(state):
 
 episode_durations = []
 
+load = False
 def plot_durations(show_result=False):
+    global file_path
+    global load
+    
     plt.figure(1)
     durations_t = torch.tensor(episode_durations, dtype=torch.float)
+
     if show_result:
         plt.title('Result')
     else:
         plt.clf()
+        if not load:
+            with open(file_path, 'rb') as f:
+                data = np.load(f)
+                np.concatenate([data, durations_t.numpy()])
+            load = True
+            plt.plot(data)
         plt.title('Training...')
     plt.xlabel('Episode')
     plt.ylabel('Duration')
     plt.plot(durations_t.numpy())
+    np.save(file_path, durations_t.numpy())
+    
     # Take 100 episode averages and plot them too
     if len(durations_t) >= 100:
         means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
@@ -278,8 +302,15 @@ class senddata(Node):
 
 #------------------------------------------------------------------------------------------------
 
+#torch.save(policy_net.state_dict(), save_path_policy_net) #저장되어 있지 않을 때만, 오류 방지
+#torch.save(policy_net.state_dict(), save_path_target_net) #저장되어 있지 않을 때만, 오류 방지
+policy_net.load_state_dict(torch.load(save_path_policy_net))
+policy_net.load_state_dict(torch.load(save_path_target_net))
+
 def main(args=None):
 #-------------------------------------------------------
+    global save_path_policy_net
+    global save_path_target_net
     global env
     global BATCH_SIZE
     global GAMMA
@@ -321,16 +352,7 @@ def main(args=None):
     if torch.cuda.is_available():
         num_episodes = 600
     else:
-        num_episodes = 50
-
-    # 저장된 가중치 불러오기
-    save_path_policy_net = os.path.expanduser('~/ros2_ws/src/mr_project2023_pkg/policy_net_weights.pth') #저장 위치
-    save_path_target_net = os.path.expanduser('~/ros2_ws/src/mr_project2023_pkg/target_net_weights.pth') #저장 위치
-
-    #torch.save(policy_net.state_dict(), save_path_policy_net) #저장되어 있지 않을 때만, 오류 방지
-    #torch.save(policy_net.state_dict(), save_path_target_net) #저장되어 있지 않을 때만, 오류 방지
-    policy_net.load_state_dict(torch.load(save_path_policy_net))
-    policy_net.load_state_dict(torch.load(save_path_target_net))
+        num_episodes = 100
     
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
@@ -414,6 +436,7 @@ def main(args=None):
     torch.save(policy_net.state_dict(), save_path_policy_net)
     torch.save(policy_net.state_dict(), save_path_target_net)
 
+    
     print('Complete')
     plot_durations(show_result=True)
     plt.ioff()

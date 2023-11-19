@@ -10,8 +10,8 @@ from my_msgs.msg import Robotarmcontrol
 from rclpy.parameter import Parameter
 
 #전처리기
-robotarm_Connect = False #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
-simulation_mode = True #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
+robotarm_Connect = True #로봇 모터 연결되어 있을 때만 모터 함수 실행, 모터 연결: True 연결 안됨: False
+simulation_mode = False #시뮬레이션 모드. 카메라 사용 안하고, 임의의 함수 식으로 물병의 각도 및 각속도 반환, 시뮬레이션 모드: True, 카메라 사용:False
 
 GRIPPER_OPEN = 20 #20은 물병을 놓을 때, 다이나믹셀 position
 GRIPPER_CLOSE = 240 #240은 물병을 놓을 때, 다이나믹셀 position
@@ -180,6 +180,7 @@ def main(args=None):
         move_robotarm(200,1000)
         user_input = input('open: o, close: c, end: q :')
         while user_input != 1:
+            move_robotarm(200,1000)
             if user_input == 'o' or user_input == 'O':
                 move_gripper(GRIPPER_OPEN)
             elif user_input == 'c' or user_input == 'C':
@@ -190,6 +191,7 @@ def main(args=None):
             user_input = input('open: o, close: c, end: q :')
         
         if not simulation_mode:
+            move_robotarm(200,1000)
             # 카메라 열기 노트북 카메라: 0, 카메라: 2
             cap = cv2.VideoCapture(2)
             
@@ -283,7 +285,7 @@ def main(args=None):
         camera_w = abs(float(angular_velocity*fps))
         #성공 유무 입력
         user_input = input('success: s, fail: f :')
-        while user_input != 1:
+        while True:
             if user_input == 's' or user_input == 'S':
                 done = 1
                 break
